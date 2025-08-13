@@ -1,0 +1,118 @@
+{% load static %}
+{% load form_tags %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate QR Code Batch</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 50px auto;
+            background-color: #1e1e1e;
+            padding: 30px 25px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
+        }
+        h1 {
+            text-align: center;
+            color: #00bcd4;
+            margin-bottom: 8px;
+        }
+        .powered-by {
+            text-align: center;
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 25px;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #bbbbbb;
+        }
+        input, select {
+            margin-bottom: 18px;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            font-size: 15px;
+            background-color: #2b2b2b;
+            color: #f5f5f5;
+        }
+        input::file-selector-button {
+            background: #00bcd4;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            margin-right: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        input::file-selector-button:hover {
+            background: #019aaa;
+        }
+        select:focus, input:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px #00bcd4;
+        }
+        button {
+            background-color: #00bcd4;
+            color: #fff;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #019aaa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Generate QR Code Batch</h1>
+        <div class="powered-by">Powered by <span style="color: #00bcd4;">Raj Bhawsar</span></div>
+
+        <form method="POST" enctype="multipart/form-data">
+            {% csrf_token %}
+            <label for="logo">Upload Logo</label>
+            <input type="file" name="logo" id="logo" accept="image/*" required>
+
+            <label for="paper_size">Paper Size</label>
+            <select name="paper_size" id="paper_size" required>
+                <option value="A4">A4</option>
+                <option value="A3">A3</option>
+                <option value="A2">A2</option>
+            </select>
+
+            <label for="block_width_mm">Block Width (mm)</label>
+            <input type="number" name="block_width_mm" id="block_width_mm" min="10" required>
+
+            <label for="block_height_mm">Block Height (mm)</label>
+            <input type="number" name="block_height_mm" id="block_height_mm" min="10" required>
+
+            <label for="spacing_mm">Spacing Between Blocks (mm)</label>
+            <input type="number" name="spacing_mm" id="spacing_mm" min="0" value="5" required>
+
+            <label for="qr_images">Upload QR Code Images</label>
+            <input type="file" name="qr_images" id="qr_images" multiple required>
+
+            <button type="submit">Generate PDF</button>
+        </form>
+    </div>
+</body>
+</html>
