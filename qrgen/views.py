@@ -10,11 +10,18 @@ from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from django.shortcuts import render, redirect
 from django.http import HttpResponse
-from .models import QRBatch
 from django import forms
-from bson import ObjectId
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
+
+# Try to import MongoDB models, fall back to Django models
+try:
+    from .models import QRBatch, QRCode
+    from bson import ObjectId
+    USE_MONGODB = True
+except ImportError:
+    from .models import QRBatchDjango as QRBatch, QRCodeDjango as QRCode
+    USE_MONGODB = False
 
 logger = logging.getLogger(__name__)
 PAPER_SIZE_MAP = {'A4': A4, 'A3': A3, 'A2': A2}

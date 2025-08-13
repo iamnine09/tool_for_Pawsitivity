@@ -76,23 +76,35 @@ WSGI_APPLICATION = 'qr_project.wsgi.application'
 # https://docs.djangoproject.com/en/4.x/ref/settings/#databases
 
 # For Railway deployment with PostgreSQL (recommended)
-import dj_database_url
-
-DATABASES = {
-    'default': dj_database_url.config(
-        default=f'sqlite:///{BASE_DIR}/db.sqlite3',
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
-}
+try:
+    import dj_database_url
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=f'sqlite:///{BASE_DIR}/db.sqlite3',
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
+except ImportError:
+    # Fallback for local development without dj-database-url
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # MongoDB connection for Railway (if using MongoDB)
 import mongoengine
 MONGODB_URI = os.environ.get('MONGODB_URI', 'mongodb://localhost:27017/qrgen')
 try:
     mongoengine.connect(host=MONGODB_URI)
+    MONGODB_AVAILABLE = True
+    print("MongoDB connected successfully")
 except Exception as e:
     print(f"MongoDB connection failed: {e}")
+    print("Continuing without MongoDB - using Django ORM instead")
+    MONGODB_AVAILABLE = False
     # Continue without MongoDB if not available
 
 # Password validation
@@ -132,6 +144,10 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Media files (for file uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.x/ref/settings/#default-auto-field
