@@ -2,7 +2,7 @@
 providers = ["python"]
 
 [phases.setup]
-aptPkgs = ["libcairo2-dev", "libgirepository1.0-dev", "gcc"]
+aptPkgs = ["libcairo2-dev", "libgirepository1.0-dev", "gcc", "libcairo2", "libcairo-gobject2"]
 
 [start]
 cmd = "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn qr_project.wsgi --bind 0.0.0.0:$PORT"
