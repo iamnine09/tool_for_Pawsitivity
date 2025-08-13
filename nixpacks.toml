@@ -7,8 +7,7 @@ cmds = ["echo 'Building with cairo dependencies'"]
 [phases.setup]
 cmds = [
   "apt-get update",
-  "apt-get install -y libcairo2-dev libgirepository1.0-dev gcc",
-  "pip install --upgrade pip"
+  "apt-get install -y libcairo2-dev libgirepository1.0-dev gcc"
 ]
 
 [phases.install]
