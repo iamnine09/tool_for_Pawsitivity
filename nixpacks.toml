@@ -15,4 +15,4 @@ cmds = [
 cmds = ["pip install -r requirements.txt"]
 
 [start]
-cmd = "gunicorn qr_project.wsgi --bind 0.0.0.0:$PORT"
+cmd = "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn qr_project.wsgi --bind 0.0.0.0:$PORT"
