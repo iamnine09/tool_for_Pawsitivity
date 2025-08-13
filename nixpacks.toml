@@ -1,0 +1,18 @@
+[build]
+providers = ["python", "node"]
+
+[phases.build]
+cmds = ["echo 'Building with cairo dependencies'"]
+
+[phases.setup]
+cmds = [
+  "apt-get update",
+  "apt-get install -y libcairo2-dev libgirepository1.0-dev gcc",
+  "pip install --upgrade pip"
+]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "gunicorn qr_project.wsgi --bind 0.0.0.0:$PORT"
