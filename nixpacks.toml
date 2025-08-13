@@ -1,17 +1,11 @@
 [build]
-providers = ["python", "node"]
-
-[phases.build]
-cmds = ["echo 'Building with cairo dependencies'"]
+providers = ["python"]
 
 [phases.setup]
-cmds = [
-  "apt-get update",
-  "apt-get install -y libcairo2-dev libgirepository1.0-dev gcc"
-]
+aptPkgs = ["libcairo2-dev", "libgirepository1.0-dev", "gcc"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt"]
+cmds = ["/opt/venv/bin/pip install -r requirements.txt"]
 
 [start]
-cmd = "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn qr_project.wsgi --bind 0.0.0.0:$PORT"
+cmd = "/opt/venv/bin/python manage.py migrate && /opt/venv/bin/python manage.py collectstatic --noinput && /opt/venv/bin/gunicorn qr_project.wsgi --bind 0.0.0.0:$PORT"
