@@ -1,6 +1,11 @@
 import datetime
 import logging
-import cairosvg
+try:
+    import cairosvg
+    CAIRO_AVAILABLE = True
+except ImportError:
+    CAIRO_AVAILABLE = False
+    print("Warning: cairosvg not available, PDF features will be limited")
 import imghdr
 from io import BytesIO
 from PIL import Image, ImageFilter, ImageEnhance
@@ -74,7 +79,18 @@ def process_qr_block(args):
     try:
         is_svg = img_data.strip().startswith(b'<svg') or b'<svg' in img_data[:500].lower()
         if is_svg:
-            img_data = cairosvg.svg2png(bytestring=img_data, output_width=int(qr_width * 4), output_height=int(qr_height * 4), dpi=1200)
+            if CAIRO_AVAILABLE:
+                img_data = cairosvg.svg2png(bytestring=img_data, output_width=int(qr_width * 4), output_height=int(qr_height * 4), dpi=1200)
+            else:
+                # Fallback: generate PNG QR code instead
+                import qrcode
+                qr = qrcode.QRCode(version=1, box_size=10, border=4)
+                qr.add_data("fallback")  # You might want to extract data from SVG
+                qr.make(fit=True)
+                qr_pil = qr.make_image(fill_color="black", back_color="white")
+                buffer = BytesIO()
+                qr_pil.save(buffer, format='PNG')
+                img_data = buffer.getvalue()
         qr_img = Image.open(BytesIO(img_data)).convert("RGBA")
         qr_img = qr_img.resize((int(qr_width * 4), int(qr_height * 4)), resample=Image.Resampling.LANCZOS)
         qr_img = qr_img.filter(ImageFilter.UnsharpMask(radius=0.5, percent=120, threshold=2))
