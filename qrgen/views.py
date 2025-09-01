@@ -1,6 +1,7 @@
 import datetime
 import logging
 import os
+import base64
 try:
     import cairosvg
     CAIRO_AVAILABLE = True
@@ -69,7 +70,7 @@ def index(request):
                 qr_data_list.append(img.read())
 
             # Store everything in session for download (stateless)
-            request.session['logo_bytes'] = logo_file.read()
+            request.session['logo_bytes'] = base64.b64encode(logo_file.read()).decode('ascii')
             request.session['paper_size'] = form.cleaned_data['paper_size']
             request.session['block_width_mm'] = form.cleaned_data['block_width_mm']
             request.session['block_height_mm'] = form.cleaned_data['block_height_mm']
@@ -145,7 +146,7 @@ def process_qr_block(img_str, qr_width, qr_height, logo_width, logo_height, bloc
 def download_pdf(request):
 
     # Get everything from session (stateless)
-    logo_bytes = request.session.get('logo_bytes')
+    logo_bytes = base64.b64decode(request.session.get('logo_bytes'))
     paper_size = request.session.get('paper_size')
     block_width_mm = request.session.get('block_width_mm')
     block_height_mm = request.session.get('block_height_mm')
