@@ -144,8 +144,7 @@ def process_qr_block(img_str, qr_width, qr_height, logo_width, logo_height, bloc
         return None
 
 def download_pdf(request):
-
-    # Get everything from session (stateless)
+    # Get everything from session
     logo_bytes = base64.b64decode(request.session.get('logo_bytes'))
     paper_size = request.session.get('paper_size')
     block_width_mm = request.session.get('block_width_mm')
@@ -163,16 +162,14 @@ def download_pdf(request):
     page_size = PAPER_SIZE_MAP[paper_size]
     c = canvas.Canvas(buffer, pagesize=page_size)
 
-    # Get block dimensions from frontend input
+    # Block dimensions
     block_w = float(block_width_mm) * mm
     block_h = float(block_height_mm) * mm
-    spacing_between_blocks = float(spacing_mm) * mm  # Space between blocks from frontend
+    spacing_between_blocks = float(spacing_mm) * mm
 
-    # Hardcoded space between QR and logo (not scaled)
-    spacing_between_qr_logo = 5  # This value is passed but not used for scaling anymore
-    
-    # Calculate equal widths for QR and logo
-    qr_width = logo_width = block_w / 2  # Split block exactly in half
+    # Hardcoded space between QR and logo
+    spacing_between_qr_logo = 5
+    qr_width = logo_width = block_w / 2
     qr_height = logo_height = block_h
 
     full_block_w = block_w
@@ -183,14 +180,13 @@ def download_pdf(request):
     x_start = x_margin
     y_start = page_size[1] - spacing_between_blocks - full_block_h
 
-    # Process logo once and cache it
+    # Process logo once
     logo_stream = BytesIO(logo_bytes)
     logo_original = Image.open(logo_stream).convert("RGBA")
     logo_aspect = logo_original.width / logo_original.height
     target_logo_width_px = int(logo_width * 4)
     target_logo_height_px = int(logo_height * 4)
 
-    # Calculate dimensions maintaining aspect ratio
     if logo_aspect >= 1:
         new_logo_width = target_logo_width_px
         new_logo_height = int(target_logo_width_px / logo_aspect)
@@ -198,145 +194,55 @@ def download_pdf(request):
         new_logo_height = target_logo_height_px
         new_logo_width = int(target_logo_height_px * logo_aspect)
 
-    # Resize and enhance logo once
-    logo_resized = logo_original.resize((new_logo_width, new_logo_height), 
-                                      resample=Image.Resampling.BICUBIC)  # BICUBIC is faster than LANCZOS
-    # Only apply UnsharpMask if really needed
-    if new_logo_width < logo_original.width:  # Only sharpen if we downsized
-        logo_resized = logo_resized.filter(ImageFilter.UnsharpMask(radius=1, percent=150, threshold=3))
-    
-    # Create final logo with padding
-    final_logo = Image.new("RGBA", (target_logo_width_px, target_logo_height_px), (255, 255, 255, 255))
-    final_logo.paste(logo_resized, 
-                    ((target_logo_width_px - new_logo_width) // 2, 
-                     (target_logo_height_px - new_logo_height) // 2), 
-                    logo_resized)
+    logo_resized = logo_original.resize((new_logo_width, new_logo_height), resample=Image.Resampling.BILINEAR)
 
-    # Cache logo bytes
+    final_logo = Image.new("RGBA", (target_logo_width_px, target_logo_height_px), (255, 255, 255, 255))
+    final_logo.paste(logo_resized, ((target_logo_width_px - new_logo_width) // 2,
+                                    (target_logo_height_px - new_logo_height) // 2), logo_resized)
+
     final_logo_bytes = BytesIO()
     final_logo.save(final_logo_bytes, format='PNG', optimize=True)
     final_logo_bytes = final_logo_bytes.getvalue()
-    
-    # Clean up original images to free memory
+
+    # Cleanup
     logo_original.close()
     logo_resized.close()
     logo_stream.close()
 
-    # Prepare args for multiprocessing
-    tasks = [
-        (img_str, qr_width, qr_height, logo_width, logo_height, block_w, block_h, spacing_between_qr_logo, final_logo_bytes)
-        for img_str in qr_data_list
-    ]
-
-    # Calculate optimal batch size based on CPU cores
-    num_cores = multiprocessing.cpu_count()
-    batch_size = max(4, num_cores * 2)  # Use more batches for more cores
     row = 0
     col = 0
     x = x_start
     y = y_start
 
-    def process_batch_sequential(batch_tasks):
-        """Process tasks sequentially as fallback"""
-        return [process_qr_block(*task) for task in batch_tasks]
+    for img_str in qr_data_list:
+        img_io = process_qr_block(img_str, qr_width, qr_height, logo_width, logo_height, 
+                                  block_w, block_h, spacing_between_qr_logo, final_logo_bytes)
+        if img_io is None:
+            continue
 
-    def process_batch_parallel(batch_tasks, executor):
-        """Process tasks in parallel with timeout"""
-        futures = []
-        for task in batch_tasks:
-            # Unpack task tuple into separate arguments
-            future = executor.submit(process_qr_block, *task)
-            futures.append(future)
-            
-        results = []
-        for future in futures:
-            try:
-                result = future.result(timeout=30)  # 30 second timeout per task
-                results.append(result)
-            except Exception as e:
-                logging.error(f"Error processing QR batch: {str(e)}")
-                results.append(None)
-        return results
+        # Position
+        x = x_start + col * (full_block_w + spacing_between_blocks)
+        y = y_start - row * (full_block_h + spacing_between_blocks)
 
-    parallel_failed = False
-    try:
-        # Try parallel processing first
-        with ProcessPoolExecutor(max_workers=num_cores) as executor:
-            for i in range(0, len(tasks), batch_size):
-                batch_tasks = tasks[i:i + batch_size]
-                try:
-                    batch_results = process_batch_parallel(batch_tasks, executor)
-                except Exception as e:
-                    logging.error(f"Parallel processing failed: {str(e)}")
-                    parallel_failed = True
-                    break
+        if y < spacing_between_blocks:
+            c.showPage()
+            row = 0
+            col = 0
+            x = x_start
+            y = y_start
 
-                for img_io in batch_results:
-                    if img_io is None:
-                        continue
-                    
-                    try:
-                        # Calculate position
-                        x = x_start + col * (full_block_w + spacing_between_blocks)
-                        y = y_start - row * (full_block_h + spacing_between_blocks)
-                        
-                        # Start new page if needed
-                        if y < spacing_between_blocks:
-                            c.showPage()
-                            row = 0
-                            col = 0
-                            x = x_start
-                            y = y_start
-                        
-                        # Draw image and update position
-                        c.drawImage(ImageReader(img_io), x, y, full_block_w, full_block_h, mask='auto')
-                        
-                        col = (col + 1) % blocks_per_row
-                        if col == 0:
-                            row += 1
-                    except Exception as e:
-                        logging.error(f"Error drawing QR code: {str(e)}")
-                    finally:
-                        # Always clean up
-                        try:
-                            img_io.close()
-                        except:
-                            pass  # Ignore cleanup errors
-    except Exception as e:
-        logging.error(f"Process pool error: {str(e)}")
-        parallel_failed = True
+        img_io.seek(0)
+        # Save as JPEG to reduce memory
+        with Image.open(img_io) as im:
+            out_io = BytesIO()
+            im.convert("RGB").save(out_io, format='JPEG', quality=85, dpi=(300, 300))
+            out_io.seek(0)
+            c.drawImage(ImageReader(out_io), x, y, full_block_w, full_block_h, mask='auto')
 
-    # If parallel processing failed, fall back to sequential
-    if parallel_failed:
-        logging.info("Falling back to sequential processing")
-        for i in range(0, len(tasks), batch_size):
-            batch_tasks = tasks[i:i + batch_size]
-            batch_results = process_batch_sequential(batch_tasks)
-            
-            for img_io in batch_results:
-                if img_io is None:
-                    continue
-                
-                # Calculate position
-                x = x_start + col * (full_block_w + spacing_between_blocks)
-                y = y_start - row * (full_block_h + spacing_between_blocks)
-                
-                # Start new page if needed
-                if y < spacing_between_blocks:
-                    c.showPage()
-                    row = 0
-                    col = 0
-                    x = x_start
-                    y = y_start
-                
-                # Draw image and update position
-                img_io.seek(0)  # Ensure buffer is at start
-                c.drawImage(ImageReader(img_io), x, y, full_block_w, full_block_h, mask='auto')
-                img_io.close()  # Clean up memory
-                
-                col = (col + 1) % blocks_per_row
-                if col == 0:
-                    row += 1
+        img_io.close()
+        col = (col + 1) % blocks_per_row
+        if col == 0:
+            row += 1
 
     c.save()
     pdf = buffer.getvalue()
