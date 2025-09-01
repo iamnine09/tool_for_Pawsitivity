@@ -6,8 +6,7 @@ try:
     CAIRO_AVAILABLE = True
 except ImportError:
     CAIRO_AVAILABLE = False
-    print("Warning: cairosvg not available, PDF features will be limited")
-import imghdr
+    print("Warning: cairosvg not available, PDF features will be limited")      
 from io import BytesIO
 from PIL import Image, ImageFilter, ImageEnhance
 from reportlab.pdfgen import canvas
@@ -75,8 +74,13 @@ def index(request):
                 ext = img.name.split('.')[-1].lower()
                 if ext not in ['png', 'jpg', 'jpeg', 'svg']:
                     continue
-                if ext != 'svg' and imghdr.what(img) is None:
-                    continue
+                if ext != 'svg':
+                    try:
+                        img.seek(0)
+                        with Image.open(img) as test_img:
+                            test_img.verify()  # Will raise if not a valid image
+                    except Exception:
+                        continue
                 qr_data_list.append(img.read())
 
             request.session['batch_id'] = str(batch.id)
