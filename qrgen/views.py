@@ -330,6 +330,7 @@ def download_pdf(request):
                     y = y_start
                 
                 # Draw image and update position
+                img_io.seek(0)  # Ensure buffer is at start
                 c.drawImage(ImageReader(img_io), x, y, full_block_w, full_block_h, mask='auto')
                 img_io.close()  # Clean up memory
                 
