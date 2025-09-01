@@ -49,25 +49,10 @@ class QRBatchForm(forms.Form):
 def index(request):
     if request.method == 'POST':
         # Import models here to avoid multiprocessing import issues
-        try:
-            from .models import QRBatch, QRCode
-        except ImportError:
-            from .models import QRBatchDjango as QRBatch, QRCodeDjango as QRCode
-
         form = QRBatchForm(request.POST, request.FILES)
         if form.is_valid():
+            # Get logo and QR images directly from upload
             logo_file = form.cleaned_data['logo']
-            batch = QRBatch(
-                paper_size=form.cleaned_data['paper_size'],
-                block_width_mm=form.cleaned_data['block_width_mm'],
-                block_height_mm=form.cleaned_data['block_height_mm'],
-                spacing_mm=form.cleaned_data['spacing_mm'],
-                created_at=datetime.datetime.utcnow()
-            )
-            batch.logo.put(logo_file, content_type=logo_file.content_type)
-            batch.save()
-
-            # Read all QR image files (no DB save)
             qr_images = request.FILES.getlist('qr_images')
             qr_data_list = []
             for img in qr_images:
@@ -83,8 +68,13 @@ def index(request):
                         continue
                 qr_data_list.append(img.read())
 
-            request.session['batch_id'] = str(batch.id)
-            request.session['qr_data_list'] = [img.decode('latin1') for img in qr_data_list]  # serialize to string
+            # Store everything in session for download (stateless)
+            request.session['logo_bytes'] = logo_file.read()
+            request.session['paper_size'] = form.cleaned_data['paper_size']
+            request.session['block_width_mm'] = form.cleaned_data['block_width_mm']
+            request.session['block_height_mm'] = form.cleaned_data['block_height_mm']
+            request.session['spacing_mm'] = form.cleaned_data['spacing_mm']
+            request.session['qr_data_list'] = [img.decode('latin1') for img in qr_data_list]
             return redirect('qrgen:download_pdf')
     else:
         form = QRBatchForm()
@@ -154,34 +144,28 @@ def process_qr_block(img_str, qr_width, qr_height, logo_width, logo_height, bloc
 
 def download_pdf(request):
 
-    # Import models here to avoid multiprocessing import issues
-    global USE_MONGODB, ObjectId
-    try:
-        from .models import QRBatch, QRCode
-        from bson import ObjectId
-        USE_MONGODB = True
-    except ImportError:
-        from .models import QRBatchDjango as QRBatch, QRCodeDjango as QRCode
-        USE_MONGODB = False
-
-    batch_id = request.session.get('batch_id')
+    # Get everything from session (stateless)
+    logo_bytes = request.session.get('logo_bytes')
+    paper_size = request.session.get('paper_size')
+    block_width_mm = request.session.get('block_width_mm')
+    block_height_mm = request.session.get('block_height_mm')
+    spacing_mm = request.session.get('spacing_mm')
     qr_data_list_raw = request.session.get('qr_data_list')
-    if not batch_id or not qr_data_list_raw:
+    if not logo_bytes or not qr_data_list_raw:
         return HttpResponse("No batch found", status=404)
 
-    batch = QRBatch.objects.get(id=ObjectId(batch_id))
     qr_data_list = qr_data_list_raw  # List of latin1-encoded strings
 
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = 'attachment; filename="qrcodes.pdf"'
     buffer = BytesIO()
-    page_size = PAPER_SIZE_MAP[batch.paper_size]
+    page_size = PAPER_SIZE_MAP[paper_size]
     c = canvas.Canvas(buffer, pagesize=page_size)
 
     # Get block dimensions from frontend input
-    block_w = batch.block_width_mm * mm
-    block_h = batch.block_height_mm * mm
-    spacing_between_blocks = batch.spacing_mm * mm  # Space between blocks from frontend
+    block_w = float(block_width_mm) * mm
+    block_h = float(block_height_mm) * mm
+    spacing_between_blocks = float(spacing_mm) * mm  # Space between blocks from frontend
 
     # Hardcoded space between QR and logo (not scaled)
     spacing_between_qr_logo = 5  # This value is passed but not used for scaling anymore
@@ -199,7 +183,7 @@ def download_pdf(request):
     y_start = page_size[1] - spacing_between_blocks - full_block_h
 
     # Process logo once and cache it
-    logo_stream = BytesIO(batch.logo.read())
+    logo_stream = BytesIO(logo_bytes)
     logo_original = Image.open(logo_stream).convert("RGBA")
     logo_aspect = logo_original.width / logo_original.height
     target_logo_width_px = int(logo_width * 4)
